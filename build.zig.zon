@@ -3,10 +3,16 @@
     .version = "0.0.0",
     .fingerprint = 0xdd8140699da324f5,
     .minimum_zig_version = "0.17.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .zig_time = .{
+            .url = "git+https://github.com/deatil/zig-time#2cb1717067ba31114f89f37464880dd392c74003",
+            .hash = "zig_time-1.3.6-FD_-Cou8AQDc9HunLAYTCKIe9gZGfq1tXwjZ5gNPWwnp",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
+        "examples",
         "src",
     },
 }
