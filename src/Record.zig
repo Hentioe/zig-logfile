@@ -2,7 +2,8 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const Level = std.log.Level;
-const Time = @import("zig_time").Time;
+const ztime = @import("zig_time");
+const Time = ztime.Time;
 const Self = @This();
 
 time: Io.Timestamp,
@@ -25,10 +26,15 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
     self.* = undefined;
 }
 
+pub const WriteOptions = struct {
+    time_fmt: []const u8,
+    timezone: ztime.Location,
+};
+
 /// 以 `<time> <LEVEL> <message>\n` 格式写入一条记录，时间使用 UTC。
-pub fn writeTo(self: Self, allocator: Allocator, w: *Io.Writer, time_fmt: []const u8) !void {
-    const time = Time.fromNanoTimestamp(self.time.nanoseconds).setLoc(.utc());
-    const time_s = try time.formatAlloc(allocator, time_fmt);
+pub fn writeTo(self: Self, allocator: Allocator, w: *Io.Writer, options: WriteOptions) !void {
+    const time = Time.fromNanoTimestamp(self.time.nanoseconds).setLoc(options.timezone);
+    const time_s = try time.formatAlloc(allocator, options.time_fmt);
     defer allocator.free(time_s);
 
     const level_s = switch (self.level) {

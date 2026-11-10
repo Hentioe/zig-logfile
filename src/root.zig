@@ -15,7 +15,8 @@ pub const Message = union(enum) {
 };
 
 pub const InitError = Allocator.Error || Io.ConcurrentError || Io.File.OpenError || Io.File.LengthError || Io.Dir.CreateDirPathError;
-pub const DEFAULT_LOG_TIME_FMT: []const u8 = "YYYY-MM-DDTHH:mm:ss";
+pub const DEFAULT_LOG_TIME_FMT: []const u8 = "YYYY-MM-DDTHH:mm:ssZ";
+pub const DEFAULT_LOG_TZ_OFFSET: i32 = 0;
 
 // 队列容量：留一些余量，突发日志避免阻塞
 var buffer: [256]Message = undefined;
@@ -31,6 +32,7 @@ var initialized: Io.Event = .unset;
 var base_dir: ?[]u8 = null;
 var file_name: []u8 = undefined;
 var time_fmt: []u8 = undefined;
+var timezone_offset: i32 = DEFAULT_LOG_TZ_OFFSET;
 
 pub fn init(app_init: std.process.Init, options: Options) InitError!void {
     std.debug.assert(!initialized.isSet());
@@ -43,6 +45,7 @@ pub fn init(app_init: std.process.Init, options: Options) InitError!void {
     else
         try gpa.dupe(u8, DEFAULT_LOG_TIME_FMT);
     errdefer gpa.free(time_fmt);
+    if (options.timezone_offset) |offset| timezone_offset = offset;
     base_dir = if (options.log_base_dir) |dir| try gpa.dupe(u8, dir) else null;
     errdefer if (base_dir) |dir| gpa.free(dir);
     if (base_dir) |dir| {
@@ -86,6 +89,10 @@ pub fn push(level: Level, comptime format: []const u8, args: anytype) void {
     };
 }
 
+pub fn updateTz(new_offset: i32) void {
+    timezone_offset = new_offset;
+}
+
 fn write(init_seek: u64) void {
     var buf: [16 * 1024]u8 = undefined; // 写线程独占的输出缓冲：多条日志合并成一次系统调用
     var fw = file.writer(io, &buf);
@@ -104,7 +111,10 @@ fn write(init_seek: u64) void {
         switch (message) {
             .log => |record| {
                 defer gpa.free(record.message);
-                record.writeTo(gpa, w, time_fmt) catch |err| errLog("Failed to write log: {s}", err);
+                record.writeTo(gpa, w, .{
+                    .time_fmt = time_fmt,
+                    .timezone = .create(timezone_offset, ""),
+                }) catch |err| errLog("Failed to write log: {s}", err);
             },
             .flush => {
                 fw.flush() catch |err| errLog("Failed to flush log: {s}", err);
