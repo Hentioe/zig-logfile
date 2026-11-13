@@ -23,7 +23,7 @@ var global_gpa: Allocator = undefined;
 pub fn main(init: std.process.Init) !void {
     global_gpa = init.gpa;
 
-    try logfile.init(init, .{ .log_file_name = "hello.log" });
+    try logfile.init(init.io, init.gpa, .{ .log_file_name = "hello.log" });
     defer logfile.deinit();
     std.log.debug("Hello", .{});
     std.log.info("Hello", .{});
