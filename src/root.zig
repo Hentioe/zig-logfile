@@ -3,20 +3,18 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const Level = std.log.Level;
+const Allocating = std.Io.Writer.Allocating;
 
-pub const Record = @import("Record.zig");
 pub const Options = @import("Options.zig");
 
 pub const Message = union(enum) {
-    log: Record,
+    allocating: Allocating,
     flush,
 
     pub const Queue = Io.Queue(@This());
 };
 
 pub const InitError = Allocator.Error || Io.ConcurrentError || Io.File.OpenError || Io.File.LengthError || Io.Dir.CreateDirPathError;
-pub const DEFAULT_LOG_TIME_FMT: []const u8 = "YYYY-MM-DDTHH:mm:ssZ";
-pub const DEFAULT_LOG_TZ_OFFSET: i32 = 0;
 
 // 队列容量：留一些余量，突发日志避免阻塞
 var buffer: [256]Message = undefined;
@@ -31,8 +29,6 @@ var initialized: Io.Event = .unset;
 
 var base_dir: ?[]u8 = null;
 var file_name: []u8 = undefined;
-var time_fmt: []u8 = undefined;
-var timezone_offset: i32 = DEFAULT_LOG_TZ_OFFSET;
 
 pub fn init(app_init: std.process.Init, options: Options) InitError!void {
     std.debug.assert(!initialized.isSet());
@@ -40,12 +36,6 @@ pub fn init(app_init: std.process.Init, options: Options) InitError!void {
     gpa = app_init.gpa;
     file_name = try gpa.dupe(u8, options.log_file_name);
     errdefer gpa.free(file_name);
-    time_fmt = if (options.time_fmt) |fmt|
-        try gpa.dupe(u8, fmt)
-    else
-        try gpa.dupe(u8, DEFAULT_LOG_TIME_FMT);
-    errdefer gpa.free(time_fmt);
-    if (options.timezone_offset) |offset| timezone_offset = offset;
     base_dir = if (options.log_base_dir) |dir| try gpa.dupe(u8, dir) else null;
     errdefer if (base_dir) |dir| gpa.free(dir);
     if (base_dir) |dir| {
@@ -73,24 +63,14 @@ pub fn deinit() void {
     if (base_dir) |dir| gpa.free(dir);
     base_dir = null;
     gpa.free(file_name);
-    gpa.free(time_fmt);
     initialized.reset();
 }
 
-pub fn push(level: Level, comptime format: []const u8, args: anytype) void {
+pub fn push(allocating: Allocating) void {
     std.debug.assert(initialized.isSet());
-    var record = Record.init(io, gpa, level, format, args) catch |err| {
-        errLog("Failed to create log record: {s}", err);
-        return;
+    queue.putOne(io, .{ .allocating = allocating }) catch |err| {
+        errLog("Failed to push allocating writer to queue: {s}", err);
     };
-    queue.putOne(io, .{ .log = record }) catch |err| {
-        errLog("Failed to push log to queue: {s}", err);
-        record.deinit(gpa); // 推送失败，释放 record
-    };
-}
-
-pub fn updateTz(new_offset: i32) void {
-    timezone_offset = new_offset;
 }
 
 fn write(init_seek: u64) void {
@@ -109,12 +89,10 @@ fn write(init_seek: u64) void {
     while (true) {
         const message = queue.getOne(io) catch break;
         switch (message) {
-            .log => |record| {
-                defer gpa.free(record.message);
-                record.writeTo(gpa, w, .{
-                    .time_fmt = time_fmt,
-                    .timezone = .create(timezone_offset, ""),
-                }) catch |err| errLog("Failed to write log: {s}", err);
+            .allocating => |allocating| {
+                var tmp = allocating;
+                defer tmp.deinit();
+                w.writeAll(tmp.written()) catch |err| errLog("Failed to write log: {s}", err);
             },
             .flush => {
                 fw.flush() catch |err| errLog("Failed to flush log: {s}", err);
@@ -133,8 +111,4 @@ fn flush() void {
 
 inline fn errLog(comptime format: []const u8, err: anyerror) void {
     std.log.defaultLog(.err, .logfile, format, .{@errorName(err)});
-}
-
-test {
-    _ = Record;
 }
