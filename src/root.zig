@@ -1,8 +1,6 @@
-//! By convention, root.zig is the root source file when making a package.
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
-const Level = std.log.Level;
 const Allocating = std.Io.Writer.Allocating;
 
 pub const Options = @import("Options.zig");
@@ -15,6 +13,9 @@ pub const Message = union(enum) {
 };
 
 pub const InitError = Allocator.Error || Io.ConcurrentError || Io.File.OpenError || Io.File.LengthError || Io.Dir.CreateDirPathError;
+
+// 警告：外部必须避免 `.logfile` 的 scope 的日志被丢向队列（否则出现错误日志时会死循环）
+const log = std.log.scoped(.logfile);
 
 // 队列容量：留一些余量，突发日志避免阻塞
 var buffer: [256]Message = undefined;
@@ -99,7 +100,7 @@ fn write(init_seek: u64) void {
             },
         }
     }
-    std.log.defaultLog(.debug, .logfile, "Log file writer has exited", .{});
+    log.debug("Log file writer exited", .{});
 }
 
 fn flush() void {
@@ -110,5 +111,5 @@ fn flush() void {
 }
 
 inline fn errLog(comptime format: []const u8, err: anyerror) void {
-    std.log.defaultLog(.err, .logfile, format, .{@errorName(err)});
+    log.err(format, .{@errorName(err)});
 }
