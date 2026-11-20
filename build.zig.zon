@@ -8,6 +8,10 @@
             .url = "git+https://github.com/deatil/zig-time#2cb1717067ba31114f89f37464880dd392c74003",
             .hash = "zig_time-1.3.6-FD_-Cou8AQDc9HunLAYTCKIe9gZGfq1tXwjZ5gNPWwnp",
         },
+        .zig_pubsub = .{
+            .url = "git+https://github.com/Hentioe/zig-pubsub#c7ae99718c7118752d154280fc0c16b84bb85b27",
+            .hash = "zig_pubsub-0.0.0-c2v68F1AAACPR3iGqaX2YwIOHzoa1GXtL7DbnNn6h19k",
+        },
     },
     .paths = .{
         "build.zig",

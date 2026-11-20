@@ -4,13 +4,16 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const zig_time = b.dependency("zig_time", .{});
+    const zig_pubsub = b.dependency("zig_pubsub", .{});
+
     const mod = b.addModule("zig_logfile", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
 
-    const zig_time = b.dependency("zig_time", .{});
     mod.addImport("zig_time", zig_time.module("zig-time"));
+    mod.addImport("zig_pubsub", zig_pubsub.module("zig_pubsub"));
 
     const examples = [_][]const u8{ "hello", "base_dir" };
     for (examples) |name| {
